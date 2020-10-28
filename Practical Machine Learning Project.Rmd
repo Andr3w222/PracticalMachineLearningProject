@@ -1,0 +1,153 @@
+---
+title: "Practical Machine Learning Project"
+author: "Andrew Volz"
+date: "10/28/2020"
+output:
+  html_document:
+    keep_md: yes
+---
+
+## Synopsis
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of this project is to predict the manner in which they did the exercise. This is the `classe` variable in the training set.
+
+## Data Description
+
+The outcome variable is `classe`, a factor variable with 5 levels. For this data set, participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions:
+
+- exactly according to the specification (Class A)
+- throwing the elbows to the front (Class B)
+- lifting the dumbbell only halfway (Class C)
+- lowering the dumbbell only halfway (Class D)
+- throwing the hips to the front (Class E)
+
+## Setting Things Up
+
+First, load in some required packages and initialize some variables.
+
+```{r configuration, echo=TRUE, results='hide'}
+#Data variables
+training.file   <- './data/pml-training.csv'
+test.cases.file <- './data/pml-testing.csv'
+training.url    <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+test.cases.url  <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+#Directories
+if (!file.exists("data")){
+  dir.create("data")
+}
+#R-Packages
+IscaretInstalled <- require("caret")
+if(!IscaretInstalled){
+    install.packages("caret")
+    library("caret")
+    }
+IsrandomForestInstalled <- require("randomForest")
+if(!IsrandomForestInstalled){
+    install.packages("randomForest")
+    library("randomForest")
+    }
+IsRpartInstalled <- require("rpart")
+if(!IsRpartInstalled){
+    install.packages("rpart")
+    library("rpart")
+    }
+IsRpartPlotInstalled <- require("rpart.plot")
+if(!IsRpartPlotInstalled){
+    install.packages("rpart.plot")
+    library("rpart.plot")
+    }
+# Set seed for reproducability
+set.seed(1000)
+```
+
+## Receiving, Exploring, and Cleaning the Data
+Next, the data is downloaded. Some EDA was performed, but omitted to keep this write up more concise. From the EDA, some manipulations and cleanup will be performed, so that `NA` values are omitted. Unneeded columns (columns 1 to 7) will be removed as well.
+
+The `pml-training.csv` data will be split into training and testing sets.
+The `pml-test.csv` data is going to be used to predict the unknown `classe` varibale for 20 participants.
+
+```{r dataprocessing, echo=TRUE, results='hide'}
+# Download data
+download.file(training.url, training.file)
+download.file(test.cases.url,test.cases.file )
+# Clean data
+training   <-read.csv(training.file, na.strings=c("NA","#DIV/0!", ""))
+testing <-read.csv(test.cases.file , na.strings=c("NA", "#DIV/0!", ""))
+training<-training[,colSums(is.na(training)) == 0]
+testing <-testing[,colSums(is.na(testing)) == 0]
+# Remove Unneeded columns
+training   <-training[,-c(1:7)]
+testing <-testing[,-c(1:7)]
+```
+
+## Cross-Validation
+Cross-Validation will be performed by splitting the training data, `pml-training.csv`, into a training set and a testing set, 75% and 25% respectively, as stated previously.
+
+```{r datasplitting, echo=TRUE, results='hide'}
+subSamples <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+subTraining <- training[subSamples, ] 
+subTesting <- training[-subSamples, ]
+```
+
+Now that the data is set up the way it needs to be, we can start looking at some prediction models.
+
+## Prediction Models
+
+### Decision Tree
+A Decision Tree is the first prediction model explored. The model will be run using the subTraining data set and then used to predict `classe` for the subTesting data set to capture accuracy.
+
+```{r decisiontree, echo=TRUE}
+# Fit model
+modelFitDT <- rpart(classe ~ ., data=subTraining, method="class")
+# Perform prediction
+predictDT <- predict(modelFitDT, subTesting, type = "class")
+# Plot result
+rpart.plot(modelFitDT, main="Decision Tree", extra=102 , under=TRUE)
+```
+
+A confusion matrix shows the accuracy of this prediction model.
+
+```{r decisiontreecm, echo=TRUE}
+confusionMatrix(predictDT, subTesting$classe)
+```
+
+With the Decision Tree only predicting at 75.43% accuracy, other models will be explored to try to capture a better prediction model.
+
+### Random Forest
+A Random Forest is the next prediction model explored.Again, the model will be run using the subTraining data set and then used to predict `classe` for the subTesting data set to capture accuracy.
+
+```{r randomforest, echo=TRUE}
+# Fit model
+modelFitRF <- randomForest(classe ~ ., data=subTraining, method="class")
+# Perform prediction
+predictRF <- predict(modelFitRF, subTesting, type = "class")
+```
+
+A confusion matrix shows the accuracy of this prediction model.
+
+```{r randomforestcm, echo=TRUE}
+confusionMatrix(predictRF, subTesting$classe)
+```
+
+The Random Forest predicts with 99.27% accuracy. This model is very accurate and is the one that will be used to predict `classe` on the testing set.
+
+## Conclusion
+
+### Final Model
+
+The confusion matrices show that the Random Forest predicts better than the Decision Tree. The accuracy for the Random Forest was 0.9927 (95% CI: (0.9899, 0.9949)) compared to 0.7543 (95% CI: (0.742, 0.7663)) for the Decision Tree. As stated previously, the Random Forest is chosen to predict `classe` on the test set.
+
+### Expected out-of-sample error
+The expected out-of-sample error is estimated at 0.0073, or 0.73%. This is calculated as 1 - accuracy for predictions made against the cross-validation set. With this expected out-of-sample error we expect to classify the testing set near perfectly.
+
+## Prediction
+The predicted `classe` values for the testing data set are generated using the Random Forest model These predicted values will then be used for the Prediction Quiz.
+
+```{r submission, echo=TRUE}
+# Perform prediction
+predictFinal <- predict(modelFitRF, testing, type="class")
+predictFinal
+
+```
